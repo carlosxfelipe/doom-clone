@@ -21,6 +21,9 @@ public class Game1 : Game
     private Texture2D _screenTexture;
     private Color[] _screenBuffer;
     private Random _rng = new Random();
+    private int _playerHealth = 100;
+    private int _maxHealth = 100;
+    private float _damageTimer = 0f;
 
     private float _recoilTimer = 0f;
     private float _bobTimer = 0f;
@@ -261,6 +264,24 @@ public class Game1 : Game
             }
         }
 
+        // Sistema de Dano ao Jogador
+        if (_damageTimer > 0)
+            _damageTimer -= dt;
+
+        foreach (var monster in _monsters)
+        {
+            if (!monster.Alive)
+                continue;
+            float dist = Vector2.Distance(_playerPos, monster.Position);
+            if (dist < 0.8f && _damageTimer <= 0)
+            {
+                _playerHealth -= 10; // Perde 10 de vida por golpe
+                _damageTimer = 0.5f; // Meio segundo de intervalo entre danos
+                if (_playerHealth < 0)
+                    _playerHealth = 0;
+            }
+        }
+
         // Sistema de Respawn Dinâmico
         _monsters.RemoveAll(mons => !mons.Alive);
         if (_monsters.Count < 3) // Limite de 3 inimigos simultâneos
@@ -277,6 +298,12 @@ public class Game1 : Game
                     }
                 );
             }
+        }
+
+        if (_playerHealth <= 0)
+        {
+            _playerHealth = 100;
+            _playerPos = new Vector2(2.5f, 2.5f);
         }
 
         base.Update(gameTime);
@@ -600,6 +627,220 @@ public class Game1 : Game
             new Rectangle(weaponX, weaponY, weaponWidth, weaponHeight),
             Color.White
         );
+
+        // HUD de Vida: Apenas Número + %
+        int uiX = 50;
+        int uiY = screenHeight - 80;
+        int scale = 8; // Tamanho dos pixels do número
+
+        void DrawPixelDigit(int dx, int dy, int n, Color color)
+        {
+            bool[] p = n switch
+            {
+                0 => new bool[]
+                {
+                    true,
+                    true,
+                    true,
+                    true,
+                    false,
+                    true,
+                    true,
+                    false,
+                    true,
+                    true,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                },
+                1 => new bool[]
+                {
+                    false,
+                    true,
+                    false,
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    false,
+                    false,
+                    true,
+                    false,
+                    true,
+                    true,
+                    true,
+                },
+                2 => new bool[]
+                {
+                    true,
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    true,
+                    true,
+                },
+                3 => new bool[]
+                {
+                    true,
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                },
+                4 => new bool[]
+                {
+                    true,
+                    false,
+                    true,
+                    true,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    false,
+                    false,
+                    true,
+                },
+                5 => new bool[]
+                {
+                    true,
+                    true,
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                },
+                6 => new bool[]
+                {
+                    true,
+                    true,
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                },
+                7 => new bool[]
+                {
+                    true,
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    false,
+                    false,
+                    true,
+                    false,
+                    false,
+                    true,
+                    false,
+                    false,
+                    true,
+                },
+                8 => new bool[]
+                {
+                    true,
+                    true,
+                    true,
+                    true,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                    true,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                },
+                9 => new bool[]
+                {
+                    true,
+                    true,
+                    true,
+                    true,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                    false,
+                    false,
+                    true,
+                    true,
+                    true,
+                    true,
+                },
+                _ => new bool[15],
+            };
+            for (int i = 0; i < 15; i++)
+                if (p[i])
+                    _spriteBatch.Draw(
+                        _pixelTexture,
+                        new Rectangle(dx + (i % 3) * scale, dy + (i / 3) * scale, scale, scale),
+                        color
+                    );
+        }
+
+        Color healthColor = _playerHealth > 25 ? Color.Red : Color.DarkRed;
+
+        if (_playerHealth >= 100)
+        {
+            DrawPixelDigit(uiX, uiY, 1, healthColor);
+            DrawPixelDigit(uiX + 4 * scale, uiY, 0, healthColor);
+            DrawPixelDigit(uiX + 8 * scale, uiY, 0, healthColor);
+        }
+        else
+        {
+            DrawPixelDigit(uiX, uiY, _playerHealth / 10, healthColor);
+            DrawPixelDigit(uiX + 4 * scale, uiY, _playerHealth % 10, healthColor);
+        }
 
         _spriteBatch.End();
 
