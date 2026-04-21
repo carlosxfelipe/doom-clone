@@ -23,6 +23,7 @@ public partial class Game1 : Game
     private Random _rng = new Random();
     private int _playerHealth = 100;
     private int _maxHealth = 100;
+    private int _monstersKilled = 0;
     private float _damageTimer = 0f;
 
     private float _recoilTimer = 0f;

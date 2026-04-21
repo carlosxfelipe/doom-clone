@@ -92,6 +92,7 @@ public partial class Game1
                 if (Math.Abs(angleDiff) < 0.2f && toEnemy.Length() < 10f)
                 {
                     monster.Alive = false;
+                    _monstersKilled++;
                     _sfxDeath.Play(); // Som de morte!
                     break; // Dano instantâneo
                 }
@@ -192,6 +193,7 @@ public partial class Game1
         {
             _playerHealth = 100;
             _playerPos = new Vector2(2.5f, 2.5f);
+            _monstersKilled = 0;
         }
 
         base.Update(gameTime);

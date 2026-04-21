@@ -594,6 +594,15 @@ public partial class Game1
             DrawPixelDigit(uiX + 4 * scale, uiY, _playerHealth % 10, healthColor);
         }
 
+        // Placar de Monstros (Canto Superior Direito)
+        int scoreX = screenWidth - 100;
+        int scoreY = 30;
+        Color scoreColor = Color.Yellow;
+
+        DrawPixelDigit(scoreX, scoreY, (_monstersKilled / 100) % 10, scoreColor);
+        DrawPixelDigit(scoreX + 4 * scale, scoreY, (_monstersKilled / 10) % 10, scoreColor);
+        DrawPixelDigit(scoreX + 8 * scale, scoreY, _monstersKilled % 10, scoreColor);
+
         _spriteBatch.End();
 
         base.Draw(gameTime);

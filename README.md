@@ -35,7 +35,7 @@ This project features a fully functional custom raycaster with DDA (Digital Diff
 ## Controls
 - **W / S:** Move forward and backward.
 - **A / D:** Rotate camera left and right.
-- **Space:** Fire weapon.
+- **Space / Mouse Left Click:** Fire weapon.
 - **Esc:** Exit game.
 
 ## Origins & Development
