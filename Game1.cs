@@ -17,12 +17,23 @@ public class Game1 : Game
     private Texture2D _flashTexture;
     private Texture2D _skyTexture;
     private Color[] _floorTextureData;
-
     private Texture2D _screenTexture;
     private Color[] _screenBuffer;
+    private Random _rng = new Random();
 
     private float _recoilTimer = 0f;
     private float _bobTimer = 0f;
+
+    private Texture2D _enemyTexture;
+
+    private class Monster
+    {
+        public Vector2 Position;
+        public bool Alive = true;
+    }
+
+    private List<Monster> _monsters = new List<Monster>();
+    private float[] _depthBuffer;
 
     // 1 = Parede, 0 = Caminho livre
     private int[,] _map =
@@ -59,11 +70,14 @@ public class Game1 : Game
     {
         _graphics = new GraphicsDeviceManager(this);
         Content.RootDirectory = "Content";
-        IsMouseVisible = true;
 
-        // Resolução clássica/simples em tela
-        _graphics.PreferredBackBufferWidth = 800;
-        _graphics.PreferredBackBufferHeight = 600;
+        IsMouseVisible = false;
+
+        _graphics.PreferredBackBufferWidth = 1280;
+        _graphics.PreferredBackBufferHeight = 960;
+        _graphics.IsFullScreen = false;
+
+        Window.AllowUserResizing = true;
     }
 
     protected override void Initialize()
@@ -121,10 +135,27 @@ public class Game1 : Game
         }
         _flashTexture.SetData(fData);
 
+        _enemyTexture = Texture2D.FromFile(GraphicsDevice, "Content/enemy.png");
+        Color[] enemyData = new Color[_enemyTexture.Width * _enemyTexture.Height];
+        _enemyTexture.GetData(enemyData);
+        for (int i = 0; i < enemyData.Length; i++)
+        {
+            int r = enemyData[i].R;
+            int g = enemyData[i].G;
+            int b = enemyData[i].B;
+            if (r > g + 40 && b > g + 40) // Chroma key para magenta
+                enemyData[i] = Color.Transparent;
+        }
+        _enemyTexture.SetData(enemyData);
+
+        int screenWidth = _graphics.PreferredBackBufferWidth;
+        int screenHeight = _graphics.PreferredBackBufferHeight;
+        _depthBuffer = new float[screenWidth];
+
         // Buffer de tela para desenhar o chão pixel-a-pixel bem rápido
         _screenTexture = new Texture2D(
             GraphicsDevice,
-            _graphics.PreferredBackBufferWidth,
+            screenWidth,
             _graphics.PreferredBackBufferHeight
         );
         _screenBuffer = new Color[
@@ -185,11 +216,47 @@ public class Game1 : Game
         if (_recoilTimer > 0)
             _recoilTimer -= dt;
 
-        if (k.IsKeyDown(Keys.Space) && _recoilTimer <= 0)
+        MouseState m = Mouse.GetState();
+        bool isShooting = k.IsKeyDown(Keys.Space) || m.LeftButton == ButtonState.Pressed;
+
+        if (isShooting && _recoilTimer <= 0)
         {
-            _recoilTimer = 0.5f; // Cadência de tiro
-            // Em uma escopeta clássica (hitscan), o tiro acerta instantaneamente usando raio,
-            // em vez de criar um "projétil voador" lento.
+            _recoilTimer = 0.5f;
+
+            // Tenta acertar o monstro mais próximo que está vivo e na mira
+            foreach (var monster in _monsters)
+            {
+                if (!monster.Alive)
+                    continue;
+
+                Vector2 toEnemy = monster.Position - _playerPos;
+                float angleToEnemy = (float)Math.Atan2(toEnemy.Y, toEnemy.X);
+                float angleDiff = angleToEnemy - _playerAngle;
+
+                while (angleDiff < -Math.PI)
+                    angleDiff += (float)Math.PI * 2;
+                while (angleDiff > Math.PI)
+                    angleDiff -= (float)Math.PI * 2;
+
+                if (Math.Abs(angleDiff) < 0.2f && toEnemy.Length() < 10f)
+                {
+                    monster.Alive = false;
+                    break; // Um tiro, uma morte (por enquanto)
+                }
+            }
+        }
+
+        // Lógica de RESPRAWN (Opção 3)
+        // Remove mortos e adiciona um novo se não houver monstros
+        _monsters.RemoveAll(mons => !mons.Alive);
+        if (_monsters.Count < 3) // Mantém sempre 3 monstros no mapa
+        {
+            int rx = _rng.Next(1, _map.GetLength(1) - 1);
+            int ry = _rng.Next(1, _map.GetLength(0) - 1);
+            if (_map[ry, rx] == 0) // Só nasce em espaço vazio
+            {
+                _monsters.Add(new Monster { Position = new Vector2(rx + 0.5f, ry + 0.5f) });
+            }
         }
 
         base.Update(gameTime);
@@ -250,17 +317,32 @@ public class Game1 : Game
         // Envia todos os pixels do chão calculados para a placa de vídeo
         _screenTexture.SetData(_screenBuffer);
 
-        // Ativa o SamplerState.LinearWrap para permitir que a textura do céu repita infinitamente nas bordas!
-        _spriteBatch.Begin(samplerState: SamplerState.LinearWrap);
+        // Prepara uma Matriz de Escala para esticar os nossos 800x600 originais pro tamanho nativo e exato da tela inteira do seu Mac
+        Matrix scaleMatrix = Matrix.CreateScale(
+            (float)GraphicsDevice.Viewport.Width / screenWidth,
+            (float)GraphicsDevice.Viewport.Height / screenHeight,
+            1.0f
+        );
+
+        // Ativa o PointWrap para esticar mantendo o visual "quadradão/pixelado" intacto (Point) e permitir a foto do céu girar infinito (Wrap)
+        _spriteBatch.Begin(
+            SpriteSortMode.Deferred,
+            null,
+            SamplerState.PointWrap,
+            null,
+            null,
+            null,
+            scaleMatrix
+        );
 
         // -- DESENHA O CÉU (Skybox) --
         // Calcula um deslocamento X baseado no ângulo que o jogador está olhando.
         // Multiplicar por uma constante ajusta a velocidade da rotação do céu!
-        int skyOffset = (int)(_playerAngle * 250); 
-        
+        int skyOffset = (int)(_playerAngle * 250);
+
         _spriteBatch.Draw(
             _skyTexture,
-            new Rectangle(0, 0, screenWidth, screenHeight / 2),   // Cobre só a metade de cima da tela
+            new Rectangle(0, 0, screenWidth, screenHeight / 2), // Cobre só a metade de cima da tela
             new Rectangle(skyOffset, 0, screenWidth, _skyTexture.Height / 2), // Seleciona um pedaço movel da textura original com Loop Infinito!
             Color.White
         );
@@ -354,6 +436,8 @@ public class Game1 : Game
             if (distanceToWall <= 0.01f)
                 distanceToWall = 0.01f;
 
+            _depthBuffer[x] = distanceToWall;
+
             int ceiling = (int)((screenHeight / 2.0f) - screenHeight / distanceToWall);
             int floor = screenHeight - ceiling;
             int wallHeight = Math.Max(0, floor - ceiling);
@@ -401,6 +485,54 @@ public class Game1 : Game
                 wallColor
             );
         } // Fim da renderização das paredes
+
+        // 3. INIMIGOS (Billboarding com Múltiplas instâncias)
+        foreach (var monster in _monsters)
+        {
+            Vector2 toEnemy = monster.Position - _playerPos;
+            float dist = toEnemy.Length();
+            float angleToEnemy = (float)Math.Atan2(toEnemy.Y, toEnemy.X);
+            float angleDiff = angleToEnemy - _playerAngle;
+
+            while (angleDiff < -Math.PI)
+                angleDiff += (float)Math.PI * 2;
+            while (angleDiff > Math.PI)
+                angleDiff -= (float)Math.PI * 2;
+
+            if (Math.Abs(angleDiff) < _fov)
+            {
+                float correctedDist = dist * (float)Math.Cos(angleDiff);
+                int spriteSize = (int)(screenHeight / correctedDist);
+
+                // AJUSTE DE ALTURA: O pé do monstro agora fica no chão
+                int floorY = (screenHeight / 2) + (spriteSize / 2);
+                int spriteScreenY = floorY - spriteSize;
+
+                float spriteScreenX = (0.5f * (angleDiff / (_fov / 2f)) + 0.5f) * screenWidth;
+
+                for (int i = 0; i < spriteSize; i++)
+                {
+                    int colX = (int)(spriteScreenX - spriteSize / 2 + i);
+                    if (colX >= 0 && colX < screenWidth)
+                    {
+                        if (_depthBuffer[colX] > correctedDist)
+                        {
+                            _spriteBatch.Draw(
+                                _enemyTexture,
+                                new Rectangle(colX, spriteScreenY, 1, spriteSize),
+                                new Rectangle(
+                                    (int)((i / (float)spriteSize) * _enemyTexture.Width),
+                                    0,
+                                    1,
+                                    _enemyTexture.Height
+                                ),
+                                Color.White
+                            );
+                        }
+                    }
+                }
+            }
+        }
 
         // 4. ARMA (com animação!)
         int weaponHeight = (int)(screenHeight * 0.7f);
