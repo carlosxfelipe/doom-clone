@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 
@@ -23,13 +24,19 @@ public class Game1 : Game
 
     private float _recoilTimer = 0f;
     private float _bobTimer = 0f;
+    private float _lastBob = 0f;
 
-    private Texture2D _enemyTexture;
+    private SoundEffect _sfxShotgun;
+    private SoundEffect _sfxFootstep;
+    private SoundEffect _sfxDeath;
+
+    private Texture2D _demonTexture;
 
     private class Monster
     {
         public Vector2 Position;
         public bool Alive = true;
+        public Texture2D Sprite;
     }
 
     private List<Monster> _monsters = new List<Monster>();
@@ -60,10 +67,10 @@ public class Game1 : Game
         { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
     };
 
-    private Vector2 _playerPos = new Vector2(2.5f, 2.5f); // Centro da célula 2,2 (caminho livre no inicio do labirinto)
+    private Vector2 _playerPos = new Vector2(2.5f, 2.5f); // Posição inicial no mapa
     private float _playerAngle = 0f;
 
-    private float _fov = (float)Math.PI / 3.0f; // Campo de visão de 60 graus
+    private float _fov = (float)Math.PI / 3.0f; // FOV (60 graus)
     private float _depth = 16.0f;
 
     public Game1()
@@ -89,17 +96,15 @@ public class Game1 : Game
     {
         _spriteBatch = new SpriteBatch(GraphicsDevice);
 
-        // Criando textura em tempo de execução de 1x1 branco para chão/teto
+        // Textura básica 1x1 branca
         _pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
         _pixelTexture.SetData(new[] { Color.White });
 
-        // Carregando as texturas geradas no diretório Content
+        // Carrega texturas do diretório Content
         _wallTexture = Texture2D.FromFile(GraphicsDevice, "Content/wall_texture.png");
-
         _floorTexture = Texture2D.FromFile(GraphicsDevice, "Content/floor_texture.png");
         _floorTextureData = new Color[_floorTexture.Width * _floorTexture.Height];
         _floorTexture.GetData(_floorTextureData);
-
         _skyTexture = Texture2D.FromFile(GraphicsDevice, "Content/sky_texture.png");
 
         _weaponTexture = Texture2D.FromFile(GraphicsDevice, "Content/weapon.png");
@@ -111,8 +116,7 @@ public class Game1 : Game
             int g = wpnData[i].G;
             int b = wpnData[i].B;
 
-            // Chroma Key Robusto: Pega até as bordas misturadas e "anti-aliasing" da compressão da imagem
-            // Qualquer cor que seja predominantemente vermelha e azul (roxo/magenta), independente de quão escura for
+            // Chroma Key: Remove fundo magenta/roxo
             if (r > g + 30 && b > g + 30 && r > 40 && b > 40)
             {
                 wpnData[i] = Color.Transparent;
@@ -135,18 +139,18 @@ public class Game1 : Game
         }
         _flashTexture.SetData(fData);
 
-        _enemyTexture = Texture2D.FromFile(GraphicsDevice, "Content/enemy.png");
-        Color[] enemyData = new Color[_enemyTexture.Width * _enemyTexture.Height];
-        _enemyTexture.GetData(enemyData);
-        for (int i = 0; i < enemyData.Length; i++)
+        _demonTexture = Texture2D.FromFile(GraphicsDevice, "Content/demon.png");
+        Color[] demonData = new Color[_demonTexture.Width * _demonTexture.Height];
+        _demonTexture.GetData(demonData);
+        for (int i = 0; i < demonData.Length; i++)
         {
-            int r = enemyData[i].R;
-            int g = enemyData[i].G;
-            int b = enemyData[i].B;
-            if (r > g + 40 && b > g + 40) // Chroma key para magenta
-                enemyData[i] = Color.Transparent;
+            int r = demonData[i].R;
+            int g = demonData[i].G;
+            int b = demonData[i].B;
+            if (r > g + 40 && b > g + 40) // Chroma Key para transparência
+                demonData[i] = Color.Transparent;
         }
-        _enemyTexture.SetData(enemyData);
+        _demonTexture.SetData(demonData);
 
         int screenWidth = _graphics.PreferredBackBufferWidth;
         int screenHeight = _graphics.PreferredBackBufferHeight;
@@ -161,6 +165,11 @@ public class Game1 : Game
         _screenBuffer = new Color[
             _graphics.PreferredBackBufferWidth * _graphics.PreferredBackBufferHeight
         ];
+
+        // Carregando os sons gerados pelo script Python
+        _sfxShotgun = SoundEffect.FromFile("Content/shotgun.wav");
+        _sfxFootstep = SoundEffect.FromFile("Content/footstep.wav");
+        _sfxDeath = SoundEffect.FromFile("Content/death.wav");
     }
 
     protected override void Update(GameTime gameTime)
@@ -173,7 +182,7 @@ public class Game1 : Game
 
         KeyboardState k = Keyboard.GetState();
 
-        // --- AJUSTE: O uso de Delta Time torna os movimentos fluídos independente dos FPS! ---
+        // Delta Time para movimentos independentes de framerate
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
         float moveSpeed = 3.0f * dt;
@@ -182,8 +191,7 @@ public class Game1 : Game
         float dirX = (float)Math.Cos(_playerAngle);
         float dirY = (float)Math.Sin(_playerAngle);
 
-        // --- AJUSTE: Sliding Collision ---
-        // Checando X e Y separadamente permite que o jogador "deslize" na parede se bater em diagonal
+        // Colisão deslizante (Sliding Collision)
         if (k.IsKeyDown(Keys.W))
         {
             if (_map[(int)_playerPos.Y, (int)(_playerPos.X + dirX * moveSpeed)] == 0)
@@ -206,13 +214,19 @@ public class Game1 : Game
         if (k.IsKeyDown(Keys.D))
             _playerAngle += rotSpeed;
 
-        // Animação de caminhada (Head bob)
         if (k.IsKeyDown(Keys.W) || k.IsKeyDown(Keys.S))
-            _bobTimer += dt * 12f; // Velocidade do passo
+        {
+            _bobTimer += dt * 12f;
+            // Toca som de passo a cada ciclo da animação
+            if (Math.Sin(_bobTimer) < 0 && Math.Sin(_lastBob) >= 0)
+                _sfxFootstep.Play(0.2f, 0f, 0f);
+        }
         else
-            _bobTimer = 0f; // Reseta arma ao parar
+            _bobTimer = 0f;
 
-        // Controle de Tiro (Recoil e Animação)
+        _lastBob = _bobTimer;
+
+        // Sistema de Disparo e Recuo
         if (_recoilTimer > 0)
             _recoilTimer -= dt;
 
@@ -222,8 +236,8 @@ public class Game1 : Game
         if (isShooting && _recoilTimer <= 0)
         {
             _recoilTimer = 0.5f;
+            _sfxShotgun.Play(); // Som do tiro!
 
-            // Tenta acertar o monstro mais próximo que está vivo e na mira
             foreach (var monster in _monsters)
             {
                 if (!monster.Alive)
@@ -241,21 +255,27 @@ public class Game1 : Game
                 if (Math.Abs(angleDiff) < 0.2f && toEnemy.Length() < 10f)
                 {
                     monster.Alive = false;
-                    break; // Um tiro, uma morte (por enquanto)
+                    _sfxDeath.Play(); // Som de morte!
+                    break; // Dano instantâneo
                 }
             }
         }
 
-        // Lógica de RESPRAWN (Opção 3)
-        // Remove mortos e adiciona um novo se não houver monstros
+        // Sistema de Respawn Dinâmico
         _monsters.RemoveAll(mons => !mons.Alive);
-        if (_monsters.Count < 3) // Mantém sempre 3 monstros no mapa
+        if (_monsters.Count < 3) // Limite de 3 inimigos simultâneos
         {
             int rx = _rng.Next(1, _map.GetLength(1) - 1);
             int ry = _rng.Next(1, _map.GetLength(0) - 1);
-            if (_map[ry, rx] == 0) // Só nasce em espaço vazio
+            if (_map[ry, rx] == 0) // Spawn apenas em células vazias
             {
-                _monsters.Add(new Monster { Position = new Vector2(rx + 0.5f, ry + 0.5f) });
+                _monsters.Add(
+                    new Monster
+                    {
+                        Position = new Vector2(rx + 0.5f, ry + 0.5f),
+                        Sprite = _demonTexture, // Atribui sprite do Demônio
+                    }
+                );
             }
         }
 
@@ -269,7 +289,7 @@ public class Game1 : Game
 
         GraphicsDevice.Clear(Color.Black);
 
-        // --- CÁLCULO DE CHÃO E TETO RAPIDAMENTE NO CPU ---
+        // Renderização de Chão (Floorcasting)
         float[] cosAngles = new float[screenWidth];
         float[] sinAngles = new float[screenWidth];
         float[] cosFix = new float[screenWidth];
@@ -284,7 +304,7 @@ public class Game1 : Game
 
         for (int y = screenHeight / 2; y < screenHeight; y++)
         {
-            // O fator foi ajustado para remover o '0.5f' e bater PERFEITAMENTE com a projeção de altura da parede
+            // Cálculo de distância por linha
             float rowDistance = screenHeight / (y - screenHeight / 2.0f + 0.0001f);
 
             float shade = 1.0f - Math.Min(rowDistance / _depth, 1.0f);
@@ -305,7 +325,7 @@ public class Game1 : Game
 
                 Color pColor = _floorTextureData[texY * _floorTexture.Width + texX];
 
-                // Aplicar sombra baseada em distância do chão
+                // Sombreamento (Fog)
                 pColor.R = (byte)(pColor.R * cMult / 255);
                 pColor.G = (byte)(pColor.G * cMult / 255);
                 pColor.B = (byte)(pColor.B * cMult / 255);
@@ -314,17 +334,17 @@ public class Game1 : Game
             }
         }
 
-        // Envia todos os pixels do chão calculados para a placa de vídeo
+        // Desenha pixels renderizados na CPU
         _screenTexture.SetData(_screenBuffer);
 
-        // Prepara uma Matriz de Escala para esticar os nossos 800x600 originais pro tamanho nativo e exato da tela inteira do seu Mac
+        // Escala para tela cheia/redimensionamento
         Matrix scaleMatrix = Matrix.CreateScale(
             (float)GraphicsDevice.Viewport.Width / screenWidth,
             (float)GraphicsDevice.Viewport.Height / screenHeight,
             1.0f
         );
 
-        // Ativa o PointWrap para esticar mantendo o visual "quadradão/pixelado" intacto (Point) e permitir a foto do céu girar infinito (Wrap)
+        // Sampler State: Pixel Art + Wrap infinito
         _spriteBatch.Begin(
             SpriteSortMode.Deferred,
             null,
@@ -335,23 +355,19 @@ public class Game1 : Game
             scaleMatrix
         );
 
-        // -- DESENHA O CÉU (Skybox) --
-        // Calcula um deslocamento X baseado no ângulo que o jogador está olhando.
-        // Multiplicar por uma constante ajusta a velocidade da rotação do céu!
-        int skyOffset = (int)(_playerAngle * 250);
+        // Skybox (Céu Dinâmico)
+        int skyOffset = (int)(_playerAngle * 250); // Deslocamento por ângulo
 
         _spriteBatch.Draw(
             _skyTexture,
-            new Rectangle(0, 0, screenWidth, screenHeight / 2), // Cobre só a metade de cima da tela
-            new Rectangle(skyOffset, 0, screenWidth, _skyTexture.Height / 2), // Seleciona um pedaço movel da textura original com Loop Infinito!
+            new Rectangle(0, 0, screenWidth, screenHeight / 2), // Metade superior
+            new Rectangle(skyOffset, 0, screenWidth, _skyTexture.Height / 2), // Repetição infinita
             Color.White
         );
 
-        // Desenha a "tela" do chão 3D desenhada a mão na CPU.
-        // A parte de cima é transparente então o Céu brilha pelo buraco superior!
         _spriteBatch.Draw(_screenTexture, Vector2.Zero, Color.White);
 
-        // 2. RAYCASTING
+        // Renderização de Paredes (Raycasting)
         for (int x = 0; x < screenWidth; x++)
         {
             float rayAngle = (_playerAngle - _fov / 2f) + (x / (float)screenWidth) * _fov;
@@ -393,9 +409,9 @@ public class Game1 : Game
             }
 
             bool hitWall = false;
-            int side = 0; // 0 para parede vertical (leste-oeste), 1 para horizontal (norte-sul)
+            int side = 0; // 0 para vertical, 1 para horizontal
 
-            // Algoritmo DDA (Digital Differential Analyzer) Exato
+            // Algoritmo DDA
             while (!hitWall)
             {
                 if (sideDistX < sideDistY)
@@ -422,17 +438,16 @@ public class Game1 : Game
                 }
             }
 
-            // Distância Euclidiana Exata
+            // Distância perpendicular (sem distorção)
             float distanceToWall;
             if (side == 0)
                 distanceToWall = (mapX - _playerPos.X + (1 - stepX) / 2.0f) / rayDirX;
             else
                 distanceToWall = (mapY - _playerPos.Y + (1 - stepY) / 2.0f) / rayDirY;
 
-            // --- AJUSTE VITAL: Corrige o distorcimento olho-de-peixe (fisheye)! ---
+            // Correção de Efeito Fisheye
             distanceToWall *= (float)Math.Cos(rayAngle - _playerAngle);
 
-            // Prevenção de divisão por zero ou muito perto da parede
             if (distanceToWall <= 0.01f)
                 distanceToWall = 0.01f;
 
@@ -442,7 +457,7 @@ public class Game1 : Game
             int floor = screenHeight - ceiling;
             int wallHeight = Math.Max(0, floor - ceiling);
 
-            // --- CÁLCULO EXATO DE TEXTURA (DDA UV Mapping) ---
+            // Mapeamento de Textura (UV)
             float exactHitX =
                 _playerPos.X
                 + rayDirX * (distanceToWall / (float)Math.Cos(rayAngle - _playerAngle));
@@ -455,7 +470,7 @@ public class Game1 : Game
             {
                 textureU = exactHitY - (float)Math.Floor(exactHitY);
                 if (rayDirX < 0)
-                    textureU = 1.0f - textureU; // Inverte ao olhar pra um lado da parede
+                    textureU = 1.0f - textureU; // Inversão de textura
             }
             else
             {
@@ -472,10 +487,10 @@ public class Game1 : Game
 
             Rectangle sourceRect = new Rectangle(texX, 0, 1, _wallTexture.Height);
 
-            // --- AJUSTE ESTÉTICO: Sombreamento por distância ---
+            // Shading por distância
             float shade = 1.0f - Math.Min(distanceToWall / _depth, 1.0f);
             if (side == 1)
-                shade *= 0.7f; // Faz uma das faces 30% mais escura (simula iluminação global direcional)
+                shade *= 0.7f; // Iluminação direcional fake
             Color wallColor = new Color((int)(255 * shade), (int)(255 * shade), (int)(255 * shade));
 
             _spriteBatch.Draw(
@@ -484,9 +499,9 @@ public class Game1 : Game
                 sourceRect,
                 wallColor
             );
-        } // Fim da renderização das paredes
+        }
 
-        // 3. INIMIGOS (Billboarding com Múltiplas instâncias)
+        // Inimigos (Billboarding)
         foreach (var monster in _monsters)
         {
             Vector2 toEnemy = monster.Position - _playerPos;
@@ -502,29 +517,32 @@ public class Game1 : Game
             if (Math.Abs(angleDiff) < _fov)
             {
                 float correctedDist = dist * (float)Math.Cos(angleDiff);
-                int spriteSize = (int)(screenHeight / correctedDist);
+                // Calculamos o tamanho baseado na escala real das paredes (2.0f unidades de altura projetada)
+                int spriteHeight = (int)((2.0f * screenHeight) / correctedDist);
+                // Reduzimos o demônio para 80% da altura da sala (0.8 unidades)
+                spriteHeight = (int)(spriteHeight * 0.8f);
 
-                // AJUSTE DE ALTURA: O pé do monstro agora fica no chão
-                int floorY = (screenHeight / 2) + (spriteSize / 2);
-                int spriteScreenY = floorY - spriteSize;
+                // Grounding do sprite
+                int floorY = (int)((screenHeight / 2.0f) + (screenHeight / correctedDist));
+                int spriteScreenY = floorY - spriteHeight;
 
                 float spriteScreenX = (0.5f * (angleDiff / (_fov / 2f)) + 0.5f) * screenWidth;
 
-                for (int i = 0; i < spriteSize; i++)
+                for (int i = 0; i < spriteHeight; i++)
                 {
-                    int colX = (int)(spriteScreenX - spriteSize / 2 + i);
+                    int colX = (int)(spriteScreenX - spriteHeight / 2 + i);
                     if (colX >= 0 && colX < screenWidth)
                     {
                         if (_depthBuffer[colX] > correctedDist)
                         {
                             _spriteBatch.Draw(
-                                _enemyTexture,
-                                new Rectangle(colX, spriteScreenY, 1, spriteSize),
+                                monster.Sprite, // Desenha sprite da instância
+                                new Rectangle(colX, spriteScreenY, 1, spriteHeight),
                                 new Rectangle(
-                                    (int)((i / (float)spriteSize) * _enemyTexture.Width),
+                                    (int)((i / (float)spriteHeight) * monster.Sprite.Width),
                                     0,
                                     1,
-                                    _enemyTexture.Height
+                                    monster.Sprite.Height
                                 ),
                                 Color.White
                             );
@@ -534,49 +552,44 @@ public class Game1 : Game
             }
         }
 
-        // 4. ARMA (com animação!)
+        // Viewmodel da Arma
         int weaponHeight = (int)(screenHeight * 0.7f);
         int weaponWidth = (int)(
             _weaponTexture.Width * ((float)weaponHeight / _weaponTexture.Height)
         );
 
-        // Coice da arma atirando (Recua "para baixo" em um pequeno pulo parabólico de senoide)
+        // Recuo parabólico (Recoil)
         int recoilY =
             _recoilTimer > 0f ? (int)(Math.Sin((0.5f - _recoilTimer) * Math.PI / 0.5f) * 120) : 0;
 
-        // Caminhada ("Head bob") em formato curvo e 8 deitado
+        // Balanço de caminhada (Head Bob)
         int bobX = (int)(Math.Cos(_bobTimer) * 15);
-        // Valor absoluto cria quicadas curtas verticais quando você pisa ("passos")
-        int bobY = (int)(Math.Abs(Math.Sin(_bobTimer)) * 20);
+        int bobY = (int)(Math.Abs(Math.Sin(_bobTimer)) * 20); // Quicada vertical (passos)
 
         int weaponX = (screenWidth / 2) - (weaponWidth / 2) + bobX;
         int weaponY = screenHeight - weaponHeight + bobY + recoilY;
 
-        // Clarão do tiro (Muzzle Flash)
-        if (_recoilTimer > 0.35f) // Desenha apenas nos primeiros milissegundos
+        // Clarão de Disparo
+        if (_recoilTimer > 0.35f) // Exibição temporária
         {
-            // O novo clarão que criei (horizontal, deitado)
             int flashWidth = (int)(weaponWidth * 0.8f);
             int flashHeight = (int)(
                 flashWidth * ((float)_flashTexture.Height / _flashTexture.Width)
             );
 
-            // Centraliza o ponto de destino (centro da tela e base/topo do cano da espingarda)
-            int flashDestX = (screenWidth / 2) + bobX;
-            // Puxamos ela uns bons centímetros pra baixo para aterrissar sobre o metal do cano real da espingarda
-            int flashDestY = weaponY + (int)(weaponHeight * 0.40f);
+            int flashDestX = (screenWidth / 2) + bobX; // Alinhamento com a arma
+            int flashDestY = weaponY + (int)(weaponHeight * 0.40f); // Ajuste no cano
 
-            // O clarão pode ser um pouco menor também (65% da espátula da arma pra não cegar o player)
-            flashWidth = (int)(weaponWidth * 0.65f);
+            flashWidth = (int)(weaponWidth * 0.65f); // Tamanho proporcional
             flashHeight = (int)(flashWidth * ((float)_flashTexture.Height / _flashTexture.Width));
 
             _spriteBatch.Draw(
                 _flashTexture,
-                new Rectangle(flashDestX, flashDestY, flashWidth, flashHeight), // Local e tamanho
+                new Rectangle(flashDestX, flashDestY, flashWidth, flashHeight),
                 null,
                 Color.White,
-                (float)Math.PI / 2f, // Gira a imagem +90 graus (positivo) para atirar o fogo para cima!
-                new Vector2(_flashTexture.Width / 2f, _flashTexture.Height / 2f), // Roda usando o centro como âncora
+                (float)Math.PI / 2f, // Rotação UP
+                new Vector2(_flashTexture.Width / 2f, _flashTexture.Height / 2f), // Âncora central
                 SpriteEffects.None,
                 0f
             );
