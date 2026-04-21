@@ -14,19 +14,12 @@ public class Game1 : Game
     private Texture2D _wallTexture;
     private Texture2D _floorTexture;
     private Texture2D _weaponTexture;
+    private Texture2D _flashTexture;
     private Color[] _floorTextureData;
 
     private Texture2D _screenTexture;
     private Color[] _screenBuffer;
 
-    class Projectile
-    {
-        public Vector2 Position;
-        public Vector2 Velocity;
-        public bool Active;
-    }
-
-    private List<Projectile> _projectiles = new List<Projectile>();
     private float _recoilTimer = 0f;
     private float _bobTimer = 0f;
 
@@ -110,6 +103,21 @@ public class Game1 : Game
         }
         _weaponTexture.SetData(wpnData);
 
+        _flashTexture = Texture2D.FromFile(GraphicsDevice, "Content/flash.png");
+        Color[] fData = new Color[_flashTexture.Width * _flashTexture.Height];
+        _flashTexture.GetData(fData);
+        for (int i = 0; i < fData.Length; i++)
+        {
+            int r = fData[i].R;
+            int g = fData[i].G;
+            int b = fData[i].B;
+            if (r > g + 30 && b > g + 30 && r > 40 && b > 40)
+            {
+                fData[i] = Color.Transparent;
+            }
+        }
+        _flashTexture.SetData(fData);
+
         // Buffer de tela para desenhar o chão pixel-a-pixel bem rápido
         _screenTexture = new Texture2D(
             GraphicsDevice,
@@ -170,41 +178,16 @@ public class Game1 : Game
         else
             _bobTimer = 0f; // Reseta arma ao parar
 
-        // Controle de Tiro (Recoil)
+        // Controle de Tiro (Recoil e Animação)
         if (_recoilTimer > 0)
             _recoilTimer -= dt;
 
         if (k.IsKeyDown(Keys.Space) && _recoilTimer <= 0)
         {
             _recoilTimer = 0.5f; // Cadência de tiro
-            _projectiles.Add(
-                new Projectile
-                {
-                    Position = _playerPos,
-                    Velocity = new Vector2(dirX * 15f, dirY * 15f), // Plasma veloz
-                    Active = true,
-                }
-            );
+            // Em uma escopeta clássica (hitscan), o tiro acerta instantaneamente usando raio,
+            // em vez de criar um "projétil voador" lento.
         }
-
-        // Atualiza Lógica do Projétil
-        foreach (var p in _projectiles)
-        {
-            p.Position += p.Velocity * dt;
-            int px = (int)p.Position.X;
-            int py = (int)p.Position.Y;
-
-            // Destruir ao colidir com qualquer parede ou limite
-            if (
-                px < 0
-                || px >= _map.GetLength(1)
-                || py < 0
-                || py >= _map.GetLength(0)
-                || _map[py, px] == 1
-            )
-                p.Active = false;
-        }
-        _projectiles.RemoveAll(p => !p.Active);
 
         base.Update(gameTime);
     }
@@ -272,9 +255,6 @@ public class Game1 : Game
 
         // Desenha a "tela" de fundo (chão e teto)
         _spriteBatch.Draw(_screenTexture, Vector2.Zero, Color.White);
-
-        // Array para controlar a profundidade de cada pixel vertical da tela desenhado pelas paredes
-        float[] zBuffer = new float[screenWidth];
 
         // 2. RAYCASTING
         for (int x = 0; x < screenWidth; x++)
@@ -361,9 +341,6 @@ public class Game1 : Game
             if (distanceToWall <= 0.01f)
                 distanceToWall = 0.01f;
 
-            // Salva a distância da parede nesta coluna 'x' para ocultar os projéteis depois
-            zBuffer[x] = distanceToWall;
-
             int ceiling = (int)((screenHeight / 2.0f) - screenHeight / distanceToWall);
             int floor = screenHeight - ceiling;
             int wallHeight = Math.Max(0, floor - ceiling);
@@ -412,51 +389,6 @@ public class Game1 : Game
             );
         } // Fim da renderização das paredes
 
-        // 3. DESENHAR PROJÉTEIS (Técnica de Sprite Billboarding)
-        foreach (var p in _projectiles)
-        {
-            float dx = p.Position.X - _playerPos.X;
-            float dy = p.Position.Y - _playerPos.Y;
-
-            // Ângulo do sprite em relação ao jogador
-            float spriteAngle = (float)Math.Atan2(dy, dx) - _playerAngle;
-
-            // Corrige se fugir do círculo -PI a +PI
-            while (spriteAngle < -Math.PI)
-                spriteAngle += (float)(2 * Math.PI);
-            while (spriteAngle > Math.PI)
-                spriteAngle -= (float)(2 * Math.PI);
-
-            // Ignora sprites atrás da câmera (mais de 90 graus)
-            if (Math.Abs(spriteAngle) > Math.PI / 2)
-                continue;
-
-            float spriteDist = (float)Math.Sqrt(dx * dx + dy * dy) * (float)Math.Cos(spriteAngle);
-            if (spriteDist <= 0.1f)
-                continue; // Muito perto corta
-
-            // Determina as posições na tela final
-            int spriteScreenX = (int)(((spriteAngle + _fov / 2.0f) / _fov) * screenWidth);
-            int spriteSize = (int)Math.Abs(screenHeight / spriteDist / 4.0f); // /4 reduz o plasma para não parecer uma bolha gigante
-
-            int drawStartX = spriteScreenX - spriteSize / 2;
-            int drawEndX = spriteScreenX + spriteSize / 2;
-            int drawStartY = screenHeight / 2 - spriteSize / 2;
-
-            // Desenhar faixa por faixa checando a distância com o ZBuffer da parede
-            for (int stripe = drawStartX; stripe < drawEndX; stripe++)
-            {
-                if (stripe > 0 && stripe < screenWidth && spriteDist < zBuffer[stripe])
-                {
-                    _spriteBatch.Draw(
-                        _pixelTexture,
-                        new Rectangle(stripe, drawStartY, 1, spriteSize),
-                        new Color(255, 120, 0)
-                    ); // Laranja intenso e sólido
-                }
-            }
-        }
-
         // 4. ARMA (com animação!)
         int weaponHeight = (int)(screenHeight * 0.7f);
         int weaponWidth = (int)(
@@ -474,6 +406,36 @@ public class Game1 : Game
 
         int weaponX = (screenWidth / 2) - (weaponWidth / 2) + bobX;
         int weaponY = screenHeight - weaponHeight + bobY + recoilY;
+
+        // Clarão do tiro (Muzzle Flash)
+        if (_recoilTimer > 0.35f) // Desenha apenas nos primeiros milissegundos
+        {
+            // O novo clarão que criei (horizontal, deitado)
+            int flashWidth = (int)(weaponWidth * 0.8f);
+            int flashHeight = (int)(
+                flashWidth * ((float)_flashTexture.Height / _flashTexture.Width)
+            );
+
+            // Centraliza o ponto de destino (centro da tela e base/topo do cano da espingarda)
+            int flashDestX = (screenWidth / 2) + bobX;
+            // Puxamos ela uns bons centímetros pra baixo para aterrissar sobre o metal do cano real da espingarda
+            int flashDestY = weaponY + (int)(weaponHeight * 0.40f);
+
+            // O clarão pode ser um pouco menor também (65% da espátula da arma pra não cegar o player)
+            flashWidth = (int)(weaponWidth * 0.65f);
+            flashHeight = (int)(flashWidth * ((float)_flashTexture.Height / _flashTexture.Width));
+
+            _spriteBatch.Draw(
+                _flashTexture,
+                new Rectangle(flashDestX, flashDestY, flashWidth, flashHeight), // Local e tamanho
+                null,
+                Color.White,
+                (float)Math.PI / 2f, // Gira a imagem +90 graus (positivo) para atirar o fogo para cima!
+                new Vector2(_flashTexture.Width / 2f, _flashTexture.Height / 2f), // Roda usando o centro como âncora
+                SpriteEffects.None,
+                0f
+            );
+        }
 
         _spriteBatch.Draw(
             _weaponTexture,
