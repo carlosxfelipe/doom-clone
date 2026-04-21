@@ -244,14 +244,18 @@ public partial class Game1
             if (Math.Abs(angleDiff) < _fov)
             {
                 float correctedDist = dist * (float)Math.Cos(angleDiff);
+
+                float time = (float)gameTime.TotalGameTime.TotalSeconds;
+                float bob = (float)Math.Sin(time * 3.0f + monster.Position.X * 5f) * 0.02f;
+
                 // Calculamos o tamanho baseado na escala real das paredes (2.0f unidades de altura projetada)
                 int spriteHeight = (int)((2.0f * screenHeight) / correctedDist);
                 // Reduzimos o demônio para 80% da altura da sala (0.8 unidades)
-                spriteHeight = (int)(spriteHeight * 0.8f);
+                spriteHeight = (int)(spriteHeight * (0.8f + bob * 0.3f));
 
-                // Grounding do sprite
+                // Grounding do sprite com o efeito de bob suavizado
                 int floorY = (int)((screenHeight / 2.0f) + (screenHeight / correctedDist));
-                int spriteScreenY = floorY - spriteHeight;
+                int spriteScreenY = floorY - spriteHeight + (int)(bob * screenHeight * 0.05f);
 
                 float spriteScreenX = (0.5f * (angleDiff / (_fov / 2f)) + 0.5f) * screenWidth;
 
@@ -263,7 +267,7 @@ public partial class Game1
                         if (_depthBuffer[colX] > correctedDist)
                         {
                             _spriteBatch.Draw(
-                                monster.Sprite, // Desenha sprite da instância
+                                monster.Sprite,
                                 new Rectangle(colX, spriteScreenY, 1, spriteHeight),
                                 new Rectangle(
                                     (int)((i / (float)spriteHeight) * monster.Sprite.Width),
