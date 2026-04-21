@@ -15,6 +15,7 @@ public class Game1 : Game
     private Texture2D _floorTexture;
     private Texture2D _weaponTexture;
     private Texture2D _flashTexture;
+    private Texture2D _skyTexture;
     private Color[] _floorTextureData;
 
     private Texture2D _screenTexture;
@@ -84,6 +85,8 @@ public class Game1 : Game
         _floorTexture = Texture2D.FromFile(GraphicsDevice, "Content/floor_texture.png");
         _floorTextureData = new Color[_floorTexture.Width * _floorTexture.Height];
         _floorTexture.GetData(_floorTextureData);
+
+        _skyTexture = Texture2D.FromFile(GraphicsDevice, "Content/sky_texture.png");
 
         _weaponTexture = Texture2D.FromFile(GraphicsDevice, "Content/weapon.png");
         Color[] wpnData = new Color[_weaponTexture.Width * _weaponTexture.Height];
@@ -241,19 +244,29 @@ public class Game1 : Game
                 pColor.B = (byte)(pColor.B * cMult / 255);
 
                 _screenBuffer[y * screenWidth + x] = pColor;
-
-                // Teto (cinza) com sombra
-                Color ceilColor = new Color(40 * cMult / 255, 40 * cMult / 255, 40 * cMult / 255);
-                _screenBuffer[(screenHeight - y - 1) * screenWidth + x] = ceilColor;
             }
         }
 
-        // Envia todos os pixels do chão e teto calculados rapidamente para a placa de vídeo
+        // Envia todos os pixels do chão calculados para a placa de vídeo
         _screenTexture.SetData(_screenBuffer);
 
-        _spriteBatch.Begin();
+        // Ativa o SamplerState.LinearWrap para permitir que a textura do céu repita infinitamente nas bordas!
+        _spriteBatch.Begin(samplerState: SamplerState.LinearWrap);
 
-        // Desenha a "tela" de fundo (chão e teto)
+        // -- DESENHA O CÉU (Skybox) --
+        // Calcula um deslocamento X baseado no ângulo que o jogador está olhando.
+        // Multiplicar por uma constante ajusta a velocidade da rotação do céu!
+        int skyOffset = (int)(_playerAngle * 250); 
+        
+        _spriteBatch.Draw(
+            _skyTexture,
+            new Rectangle(0, 0, screenWidth, screenHeight / 2),   // Cobre só a metade de cima da tela
+            new Rectangle(skyOffset, 0, screenWidth, _skyTexture.Height / 2), // Seleciona um pedaço movel da textura original com Loop Infinito!
+            Color.White
+        );
+
+        // Desenha a "tela" do chão 3D desenhada a mão na CPU.
+        // A parte de cima é transparente então o Céu brilha pelo buraco superior!
         _spriteBatch.Draw(_screenTexture, Vector2.Zero, Color.White);
 
         // 2. RAYCASTING
