@@ -12,6 +12,7 @@ public class Game1 : Game
     private Texture2D _pixelTexture;
     private Texture2D _wallTexture;
     private Texture2D _floorTexture;
+    private Texture2D _weaponTexture;
     private Color[] _floorTextureData;
 
     private Texture2D _screenTexture;
@@ -78,6 +79,24 @@ public class Game1 : Game
         _floorTexture = Texture2D.FromFile(GraphicsDevice, "Content/floor_texture.png");
         _floorTextureData = new Color[_floorTexture.Width * _floorTexture.Height];
         _floorTexture.GetData(_floorTextureData);
+
+        _weaponTexture = Texture2D.FromFile(GraphicsDevice, "Content/weapon.png");
+        Color[] wpnData = new Color[_weaponTexture.Width * _weaponTexture.Height];
+        _weaponTexture.GetData(wpnData);
+        for (int i = 0; i < wpnData.Length; i++)
+        {
+            int r = wpnData[i].R;
+            int g = wpnData[i].G;
+            int b = wpnData[i].B;
+
+            // Chroma Key Robusto: Pega até as bordas misturadas e "anti-aliasing" da compressão da imagem
+            // Qualquer cor que seja predominantemente vermelha e azul (roxo/magenta), independente de quão escura for
+            if (r > g + 30 && b > g + 30 && r > 40 && b > 40)
+            {
+                wpnData[i] = Color.Transparent;
+            }
+        }
+        _weaponTexture.SetData(wpnData);
 
         // Buffer de tela para desenhar o chão pixel-a-pixel bem rápido
         _screenTexture = new Texture2D(
@@ -332,6 +351,20 @@ public class Game1 : Game
                 wallColor
             );
         }
+
+        // 3. ARMA
+        int weaponHeight = (int)(screenHeight * 0.7f);
+        int weaponWidth = (int)(
+            _weaponTexture.Width * ((float)weaponHeight / _weaponTexture.Height)
+        );
+        int weaponX = (screenWidth / 2) - (weaponWidth / 2);
+        int weaponY = screenHeight - weaponHeight;
+
+        _spriteBatch.Draw(
+            _weaponTexture,
+            new Rectangle(weaponX, weaponY, weaponWidth, weaponHeight),
+            Color.White
+        );
 
         _spriteBatch.End();
 
