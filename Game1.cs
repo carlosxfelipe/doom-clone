@@ -34,15 +34,27 @@ public partial class Game1 : Game
     private SoundEffect _sfxDeath;
 
     private Texture2D _demonTexture;
+    private Texture2D _fireballTexture;
 
     private class Monster
     {
         public Vector2 Position;
         public bool Alive = true;
         public Texture2D Sprite;
+        public float AttackTimer = 2.0f;
+    }
+
+    private class Projectile
+    {
+        public Vector2 Position;
+        public Vector2 Direction;
+        public float Speed = 5.0f;
+        public float HeightOffset = 3.5f;
+        public bool Alive = true;
     }
 
     private List<Monster> _monsters = new List<Monster>();
+    private List<Projectile> _projectiles = new List<Projectile>();
     private float[] _depthBuffer;
 
     // 1 = Parede, 0 = Caminho livre
@@ -154,6 +166,16 @@ public partial class Game1 : Game
                 demonData[i] = Color.Transparent;
         }
         _demonTexture.SetData(demonData);
+
+        _fireballTexture = Texture2D.FromFile(GraphicsDevice, "Content/fireball.png");
+        Color[] fireballData = new Color[_fireballTexture.Width * _fireballTexture.Height];
+        _fireballTexture.GetData(fireballData);
+        for (int i = 0; i < fireballData.Length; i++)
+        {
+            if (fireballData[i].R > 200 && fireballData[i].G < 100 && fireballData[i].B > 200) // Chroma Key Magenta
+                fireballData[i] = Color.Transparent;
+        }
+        _fireballTexture.SetData(fireballData);
 
         int screenWidth = _graphics.PreferredBackBufferWidth;
         int screenHeight = _graphics.PreferredBackBufferHeight;

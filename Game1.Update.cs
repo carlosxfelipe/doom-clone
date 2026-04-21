@@ -106,14 +106,68 @@ public partial class Game1
         {
             if (!monster.Alive)
                 continue;
-            float dist = Vector2.Distance(_playerPos, monster.Position);
-            if (dist < 0.8f && _damageTimer <= 0)
+
+            float distToPlayer = Vector2.Distance(_playerPos, monster.Position);
+
+            // IA de Ataque à distância
+            if (distToPlayer < 12f)
             {
-                _playerHealth -= 10; // Perde 10 de vida por golpe
-                _damageTimer = 0.5f; // Meio segundo de intervalo entre danos
+                monster.AttackTimer -= dt;
+                if (monster.AttackTimer <= 0)
+                {
+                    Vector2 dirToPlayer = _playerPos - monster.Position;
+                    dirToPlayer.Normalize();
+
+                    _projectiles.Add(
+                        new Projectile
+                        {
+                            Position = monster.Position,
+                            Direction = dirToPlayer,
+                            Speed = 6.0f,
+                            HeightOffset = 3.5f,
+                        }
+                    );
+
+                    // Intervalo randômico entre 1.5 e 3.5 segundos
+                    monster.AttackTimer = 1.5f + (float)_rng.NextDouble() * 2.0f;
+                }
+            }
+
+            // Dano por contato direto (mordida)
+            if (distToPlayer < 0.8f && _damageTimer <= 0)
+            {
+                _playerHealth -= 10;
+                _damageTimer = 0.5f;
                 if (_playerHealth < 0)
                     _playerHealth = 0;
             }
+        }
+
+        // Lógica das Bolas de Fogo
+        for (int i = _projectiles.Count - 1; i >= 0; i--)
+        {
+            var p = _projectiles[i];
+            p.Position += p.Direction * p.Speed * dt;
+
+            // Efeito de queda (Gravidade)
+            p.HeightOffset -= 1.5f * dt;
+            if (p.HeightOffset < 0.2f)
+                p.HeightOffset = 0.2f;
+
+            if (_map[(int)p.Position.Y, (int)p.Position.X] == 1)
+            {
+                p.Alive = false;
+            }
+            else if (Vector2.Distance(p.Position, _playerPos) < 0.5f)
+            {
+                _playerHealth -= 15;
+                p.Alive = false;
+                if (_playerHealth < 0)
+                    _playerHealth = 0;
+            }
+
+            if (!p.Alive)
+                _projectiles.RemoveAt(i);
         }
 
         // Sistema de Respawn Dinâmico

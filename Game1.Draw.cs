@@ -283,6 +283,54 @@ public partial class Game1
             }
         }
 
+        // Projéteis (Bolas de Fogo)
+        foreach (var p in _projectiles)
+        {
+            Vector2 toProj = p.Position - _playerPos;
+            float dist = toProj.Length();
+            float angleToProj = (float)Math.Atan2(toProj.Y, toProj.X);
+            float angleDiff = angleToProj - _playerAngle;
+
+            while (angleDiff < -Math.PI)
+                angleDiff += (float)Math.PI * 2;
+            while (angleDiff > Math.PI)
+                angleDiff -= (float)Math.PI * 2;
+
+            if (Math.Abs(angleDiff) < _fov)
+            {
+                float correctedDist = dist * (float)Math.Cos(angleDiff);
+                int projHeight = (int)((0.4f * screenHeight) / correctedDist);
+
+                int floorY = (int)((screenHeight / 2.0f) + (screenHeight / correctedDist));
+                int projScreenY = floorY - (int)(projHeight * p.HeightOffset);
+
+                float projScreenX = (0.5f * (angleDiff / (_fov / 2f)) + 0.5f) * screenWidth;
+
+                int projWidth = projHeight;
+                for (int i = 0; i < projWidth; i++)
+                {
+                    int colX = (int)(projScreenX - projWidth / 2 + i);
+                    if (colX >= 0 && colX < screenWidth)
+                    {
+                        if (_depthBuffer[colX] > correctedDist)
+                        {
+                            _spriteBatch.Draw(
+                                _fireballTexture,
+                                new Rectangle(colX, projScreenY, 1, projHeight),
+                                new Rectangle(
+                                    (int)((i / (float)projWidth) * _fireballTexture.Width),
+                                    0,
+                                    1,
+                                    _fireballTexture.Height
+                                ),
+                                Color.White
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         // Viewmodel da Arma
         int weaponHeight = (int)(screenHeight * 0.7f);
         int weaponWidth = (int)(
