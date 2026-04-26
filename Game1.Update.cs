@@ -239,6 +239,33 @@ public partial class Game1
             }
         }
 
+        // Coleta de Medkits
+        for (int i = _medkits.Count - 1; i >= 0; i--)
+        {
+            var kit = _medkits[i];
+            if (Vector2.Distance(_playerPos, kit.Position) < 0.6f && _playerHealth < 100)
+            {
+                _playerHealth += 30;
+                if (_playerHealth > 100)
+                    _playerHealth = 100;
+                kit.Active = false;
+                _medkits.RemoveAt(i);
+                // Poderia tocar um som de cura aqui se tivéssemos um
+            }
+        }
+
+        // Sistema de Respawn de Medkits
+        if (_medkits.Count < 2) // Mantém sempre 2 medkits no mapa
+        {
+            int rx = _rng.Next(1, _map.GetLength(1) - 1);
+            int ry = _rng.Next(1, _map.GetLength(0) - 1);
+            Vector2 spawnPos = new Vector2(rx + 0.5f, ry + 0.5f);
+            if (_map[ry, rx] == 0 && Vector2.Distance(_playerPos, spawnPos) > 4.0f)
+            {
+                _medkits.Add(new Item { Position = spawnPos });
+            }
+        }
+
         if (_playerHealth <= 0)
         {
             _playerHealth = 100;

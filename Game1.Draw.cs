@@ -331,6 +331,55 @@ public partial class Game1
             }
         }
 
+        // Renderização de Medkits (Billboarding)
+        foreach (var kit in _medkits)
+        {
+            Vector2 toKit = kit.Position - _playerPos;
+            float dist = toKit.Length();
+            float angleToKit = (float)Math.Atan2(toKit.Y, toKit.X);
+            float angleDiff = angleToKit - _playerAngle;
+
+            while (angleDiff < -Math.PI)
+                angleDiff += (float)Math.PI * 2;
+            while (angleDiff > Math.PI)
+                angleDiff -= (float)Math.PI * 2;
+
+            if (Math.Abs(angleDiff) < _fov)
+            {
+                float correctedDist = dist * (float)Math.Cos(angleDiff);
+                // Medkits são menores (0.3 unidades de altura)
+                int spriteHeight = (int)((0.3f * screenHeight) / correctedDist);
+
+                int floorY = (int)((screenHeight / 2.0f) + (screenHeight / correctedDist));
+                int spriteScreenY = floorY - spriteHeight;
+
+                float spriteScreenX = (0.5f * (angleDiff / (_fov / 2f)) + 0.5f) * screenWidth;
+
+                int spriteWidth = spriteHeight;
+                for (int i = 0; i < spriteWidth; i++)
+                {
+                    int colX = (int)(spriteScreenX - spriteWidth / 2 + i);
+                    if (colX >= 0 && colX < screenWidth)
+                    {
+                        if (_depthBuffer[colX] > correctedDist)
+                        {
+                            _spriteBatch.Draw(
+                                _medkitTexture,
+                                new Rectangle(colX, spriteScreenY, 1, spriteHeight),
+                                new Rectangle(
+                                    (int)((i / (float)spriteWidth) * _medkitTexture.Width),
+                                    0,
+                                    1,
+                                    _medkitTexture.Height
+                                ),
+                                Color.White
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         // Viewmodel da Arma
         int weaponHeight = (int)(screenHeight * 0.7f);
         int weaponWidth = (int)(

@@ -41,6 +41,7 @@ public partial class Game1 : Game
     private Texture2D _demonTexture;
     private Texture2D _skeletonTexture;
     private Texture2D _skeletonAttackTexture;
+    private Texture2D _medkitTexture;
     private Texture2D _fireballTexture;
 
     private class Monster
@@ -54,6 +55,12 @@ public partial class Game1 : Game
         public int Health = 2;
     }
 
+    private class Item
+    {
+        public Vector2 Position;
+        public bool Active = true;
+    }
+
     private class Projectile
     {
         public Vector2 Position;
@@ -65,32 +72,8 @@ public partial class Game1 : Game
 
     private List<Monster> _monsters = new List<Monster>();
     private List<Projectile> _projectiles = new List<Projectile>();
+    private List<Item> _medkits = new List<Item>();
     private float[] _depthBuffer;
-
-    // 1 = Parede, 0 = Caminho livre
-    private int[,] _map =
-    {
-        { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
-        { 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
-        { 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
-        { 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1 },
-        { 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1 },
-        { 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1 },
-        { 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1 },
-        { 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1 },
-        { 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1 },
-        { 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
-        { 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
-        { 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1 },
-        { 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1 },
-        { 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1 },
-        { 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1 },
-        { 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1 },
-        { 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1 },
-        { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1 },
-        { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1 },
-        { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
-    };
 
     private Vector2 _playerPos = new Vector2(2.5f, 2.5f); // Posição inicial no mapa
     private float _playerAngle = 0f;
@@ -205,6 +188,16 @@ public partial class Game1 : Game
                 skeletonAttackData[i] = Color.Transparent;
         }
         _skeletonAttackTexture.SetData(skeletonAttackData);
+
+        _medkitTexture = Texture2D.FromFile(GraphicsDevice, "Content/medkit.png");
+        Color[] medData = new Color[_medkitTexture.Width * _medkitTexture.Height];
+        _medkitTexture.GetData(medData);
+        for (int i = 0; i < medData.Length; i++)
+        {
+            if (medData[i].R > 200 && medData[i].B > 200 && medData[i].G < 150)
+                medData[i] = Color.Transparent;
+        }
+        _medkitTexture.SetData(medData);
 
         _fireballTexture = Texture2D.FromFile(GraphicsDevice, "Content/fireball.png");
         Color[] fireballData = new Color[_fireballTexture.Width * _fireballTexture.Height];
