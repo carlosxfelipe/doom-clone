@@ -42,3 +42,6 @@ This project features a fully functional custom raycaster with DDA (Digital Diff
 This entire project (from the core engine architectural codebase down to all exact visual pixel art assets) was developed 100% autonomously with **Antigravity**. 
 
 The initial core development was powered by **Gemini 3.1 Pro (High)**. Once the Pro tokens were exhausted, the development and final polish (including enemy spawning systems and performance optimizations) continued seamlessly using **Gemini 3 Flash**.
+
+## Credits
+Some audio resources used in this project were sourced from the [StanislavPetrovV/DOOM-style-Game](https://github.com/StanislavPetrovV/DOOM-style-Game/tree/main/resources/sound) repository.

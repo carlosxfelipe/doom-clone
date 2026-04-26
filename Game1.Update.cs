@@ -91,9 +91,17 @@ public partial class Game1
 
                 if (Math.Abs(angleDiff) < 0.2f && toEnemy.Length() < 10f)
                 {
-                    monster.Alive = false;
-                    _monstersKilled++;
-                    _sfxDeath.Play(); // Som de morte!
+                    monster.Health--;
+                    if (monster.Health <= 0)
+                    {
+                        monster.Alive = false;
+                        _monstersKilled++;
+                        _sfxNpcDeath.Play(); // Som de morte real!
+                    }
+                    else
+                    {
+                        _sfxNpcPain.Play(); // Som de dor!
+                    }
                     break; // Dano instantâneo
                 }
             }
@@ -110,14 +118,30 @@ public partial class Game1
 
             float distToPlayer = Vector2.Distance(_playerPos, monster.Position);
 
-            // IA de Ataque à distância
-            if (distToPlayer < 12f)
+            // IA de Perseguição para corpo-a-corpo
+            if (monster.IsMelee)
+            {
+                Vector2 dirToPlayer = _playerPos - monster.Position;
+                if (distToPlayer > 0.7f && distToPlayer < 15f)
+                {
+                    dirToPlayer.Normalize();
+                    float chaseSpeed = 1.2f * dt;
+                    Vector2 nextPos = monster.Position + dirToPlayer * chaseSpeed;
+                    if (_map[(int)nextPos.Y, (int)nextPos.X] == 0)
+                        monster.Position = nextPos;
+                }
+            }
+
+            // IA de Ataque à distância (Demônio)
+            if (!monster.IsMelee && distToPlayer < 12f)
             {
                 monster.AttackTimer -= dt;
                 if (monster.AttackTimer <= 0)
                 {
                     Vector2 dirToPlayer = _playerPos - monster.Position;
                     dirToPlayer.Normalize();
+
+                    _sfxNpcAttack.Play(); // Som de ataque do NPC!
 
                     _projectiles.Add(
                         new Projectile
@@ -134,11 +158,31 @@ public partial class Game1
                 }
             }
 
-            // Dano por contato direto (mordida)
+            // Lógica de Animação de Ataque (Esqueleto)
+            if (monster.IsMelee)
+            {
+                if (monster.StateTimer > 0)
+                {
+                    monster.StateTimer -= dt;
+                    monster.Sprite = _skeletonAttackTexture;
+                }
+                else
+                {
+                    monster.Sprite = _skeletonTexture;
+                    if (distToPlayer < 1.2f)
+                    {
+                        monster.StateTimer = 0.5f; // Duração do "corte"
+                        _sfxNpcAttack.Play(); // Som de ataque corpo-a-corpo!
+                    }
+                }
+            }
+
+            // Dano por contato direto (mordida ou espada)
             if (distToPlayer < 0.8f && _damageTimer <= 0)
             {
-                _playerHealth -= 10;
-                _damageTimer = 0.5f;
+                _playerHealth -= monster.IsMelee ? 12 : 10; // Espada agora tira 12
+                _damageTimer = 0.6f;
+                _sfxPlayerPain.Play(); // Som de dor do jogador!
                 if (_playerHealth < 0)
                     _playerHealth = 0;
             }
@@ -163,6 +207,7 @@ public partial class Game1
             {
                 _playerHealth -= 15;
                 p.Alive = false;
+                _sfxPlayerPain.Play(); // Som de dor do jogador ao ser atingido por projétil!
                 if (_playerHealth < 0)
                     _playerHealth = 0;
             }
@@ -177,13 +222,18 @@ public partial class Game1
         {
             int rx = _rng.Next(1, _map.GetLength(1) - 1);
             int ry = _rng.Next(1, _map.GetLength(0) - 1);
-            if (_map[ry, rx] == 0) // Spawn apenas em células vazias
+            Vector2 spawnPos = new Vector2(rx + 0.5f, ry + 0.5f);
+            float distToPlayer = Vector2.Distance(_playerPos, spawnPos);
+
+            if (_map[ry, rx] == 0 && distToPlayer > 6.0f) // Spawn apenas longe do jogador
             {
+                bool isMelee = _rng.Next(2) == 0;
                 _monsters.Add(
                     new Monster
                     {
-                        Position = new Vector2(rx + 0.5f, ry + 0.5f),
-                        Sprite = _demonTexture, // Atribui sprite do Demônio
+                        Position = spawnPos,
+                        Sprite = isMelee ? _skeletonTexture : _demonTexture,
+                        IsMelee = isMelee,
                     }
                 );
             }

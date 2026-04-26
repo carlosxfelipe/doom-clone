@@ -22,7 +22,6 @@ public partial class Game1 : Game
     private Color[] _screenBuffer;
     private Random _rng = new Random();
     private int _playerHealth = 100;
-    private int _maxHealth = 100;
     private int _monstersKilled = 0;
     private float _damageTimer = 0f;
 
@@ -32,9 +31,16 @@ public partial class Game1 : Game
 
     private SoundEffect _sfxShotgun;
     private SoundEffect _sfxFootstep;
-    private SoundEffect _sfxDeath;
+    private SoundEffect _sfxNpcAttack;
+    private SoundEffect _sfxNpcDeath;
+    private SoundEffect _sfxNpcPain;
+    private SoundEffect _sfxPlayerPain;
+    private SoundEffect _sfxTheme;
+    private SoundEffectInstance _themeInstance;
 
     private Texture2D _demonTexture;
+    private Texture2D _skeletonTexture;
+    private Texture2D _skeletonAttackTexture;
     private Texture2D _fireballTexture;
 
     private class Monster
@@ -43,6 +49,9 @@ public partial class Game1 : Game
         public bool Alive = true;
         public Texture2D Sprite;
         public float AttackTimer = 2.0f;
+        public bool IsMelee = false;
+        public float StateTimer = 0f;
+        public int Health = 2;
     }
 
     private class Projectile
@@ -168,6 +177,35 @@ public partial class Game1 : Game
         }
         _demonTexture.SetData(demonData);
 
+        _skeletonTexture = Texture2D.FromFile(GraphicsDevice, "Content/skeleton.png");
+        Color[] skeletonData = new Color[_skeletonTexture.Width * _skeletonTexture.Height];
+        _skeletonTexture.GetData(skeletonData);
+        for (int i = 0; i < skeletonData.Length; i++)
+        {
+            int r = skeletonData[i].R;
+            int g = skeletonData[i].G;
+            int b = skeletonData[i].B;
+            // Chroma Key Magenta (#FF00FF)
+            if (r > 200 && b > 200 && g < 150)
+                skeletonData[i] = Color.Transparent;
+        }
+        _skeletonTexture.SetData(skeletonData);
+
+        _skeletonAttackTexture = Texture2D.FromFile(GraphicsDevice, "Content/skeleton_attack.png");
+        Color[] skeletonAttackData = new Color[
+            _skeletonAttackTexture.Width * _skeletonAttackTexture.Height
+        ];
+        _skeletonAttackTexture.GetData(skeletonAttackData);
+        for (int i = 0; i < skeletonAttackData.Length; i++)
+        {
+            int r = skeletonAttackData[i].R;
+            int g = skeletonAttackData[i].G;
+            int b = skeletonAttackData[i].B;
+            if (r > 200 && b > 200 && g < 150)
+                skeletonAttackData[i] = Color.Transparent;
+        }
+        _skeletonAttackTexture.SetData(skeletonAttackData);
+
         _fireballTexture = Texture2D.FromFile(GraphicsDevice, "Content/fireball.png");
         Color[] fireballData = new Color[_fireballTexture.Width * _fireballTexture.Height];
         _fireballTexture.GetData(fireballData);
@@ -192,9 +230,19 @@ public partial class Game1 : Game
             _graphics.PreferredBackBufferWidth * _graphics.PreferredBackBufferHeight
         ];
 
-        // Carregando os sons gerados pelo script Python
+        // Carregando os novos sons
         _sfxShotgun = SoundEffect.FromFile("Content/shotgun.wav");
         _sfxFootstep = SoundEffect.FromFile("Content/footstep.wav");
-        _sfxDeath = SoundEffect.FromFile("Content/death.wav");
+        _sfxNpcAttack = SoundEffect.FromFile("Content/npc_attack.wav");
+        _sfxNpcDeath = SoundEffect.FromFile("Content/npc_death.wav");
+        _sfxNpcPain = SoundEffect.FromFile("Content/npc_pain.wav");
+        _sfxPlayerPain = SoundEffect.FromFile("Content/player_pain.wav");
+
+        // Carregando e iniciando a música (em WAV para compatibilidade total no Mac)
+        _sfxTheme = SoundEffect.FromFile("Content/theme.wav");
+        _themeInstance = _sfxTheme.CreateInstance();
+        _themeInstance.IsLooped = true;
+        _themeInstance.Volume = 0.5f;
+        _themeInstance.Play();
     }
 }
