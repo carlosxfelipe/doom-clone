@@ -28,21 +28,34 @@ public partial class Game1
         float dirX = (float)Math.Cos(_playerAngle);
         float dirY = (float)Math.Sin(_playerAngle);
 
-        // Colisão deslizante (Sliding Collision)
+        // Colisão deslizante (Sliding Collision) com raio para evitar entrar nas paredes
+        float pRadius = 0.3f;
         if (k.IsKeyDown(Keys.W))
         {
-            if (_map[(int)_playerPos.Y, (int)(_playerPos.X + dirX * moveSpeed)] == 0)
-                _playerPos.X += dirX * moveSpeed;
-            if (_map[(int)(_playerPos.Y + dirY * moveSpeed), (int)_playerPos.X] == 0)
-                _playerPos.Y += dirY * moveSpeed;
+            float nx = _playerPos.X + dirX * moveSpeed;
+            float ny = _playerPos.Y + dirY * moveSpeed;
+
+            if (_map[(int)(_playerPos.Y - pRadius), (int)(nx + (dirX > 0 ? pRadius : -pRadius))] == 0 &&
+                _map[(int)(_playerPos.Y + pRadius), (int)(nx + (dirX > 0 ? pRadius : -pRadius))] == 0)
+                _playerPos.X = nx;
+
+            if (_map[(int)(ny + (dirY > 0 ? pRadius : -pRadius)), (int)(_playerPos.X - pRadius)] == 0 &&
+                _map[(int)(ny + (dirY > 0 ? pRadius : -pRadius)), (int)(_playerPos.X + pRadius)] == 0)
+                _playerPos.Y = ny;
         }
 
         if (k.IsKeyDown(Keys.S))
         {
-            if (_map[(int)_playerPos.Y, (int)(_playerPos.X - dirX * moveSpeed)] == 0)
-                _playerPos.X -= dirX * moveSpeed;
-            if (_map[(int)(_playerPos.Y - dirY * moveSpeed), (int)_playerPos.X] == 0)
-                _playerPos.Y -= dirY * moveSpeed;
+            float nx = _playerPos.X - dirX * moveSpeed;
+            float ny = _playerPos.Y - dirY * moveSpeed;
+
+            if (_map[(int)(_playerPos.Y - pRadius), (int)(nx + (-dirX > 0 ? pRadius : -pRadius))] == 0 &&
+                _map[(int)(_playerPos.Y + pRadius), (int)(nx + (-dirX > 0 ? pRadius : -pRadius))] == 0)
+                _playerPos.X = nx;
+
+            if (_map[(int)(ny + (-dirY > 0 ? pRadius : -pRadius)), (int)(_playerPos.X - pRadius)] == 0 &&
+                _map[(int)(ny + (-dirY > 0 ? pRadius : -pRadius)), (int)(_playerPos.X + pRadius)] == 0)
+                _playerPos.Y = ny;
         }
 
         if (k.IsKeyDown(Keys.A))
@@ -126,9 +139,30 @@ public partial class Game1
                 {
                     dirToPlayer.Normalize();
                     float chaseSpeed = 1.2f * dt;
-                    Vector2 nextPos = monster.Position + dirToPlayer * chaseSpeed;
-                    if (_map[(int)nextPos.Y, (int)nextPos.X] == 0)
-                        monster.Position = nextPos;
+                    float mRadius = 0.35f;
+
+                    // Movimento deslizante com raio para evitar atravessar paredes
+                    // Tenta mover no eixo X
+                    if (Math.Abs(dirToPlayer.X) > 0.001f)
+                    {
+                        float nx = monster.Position.X + dirToPlayer.X * chaseSpeed;
+                        if (_map[(int)(monster.Position.Y - mRadius), (int)(nx + (dirToPlayer.X > 0 ? mRadius : -mRadius))] == 0 &&
+                            _map[(int)(monster.Position.Y + mRadius), (int)(nx + (dirToPlayer.X > 0 ? mRadius : -mRadius))] == 0)
+                        {
+                            monster.Position.X = nx;
+                        }
+                    }
+
+                    // Tenta mover no eixo Y
+                    if (Math.Abs(dirToPlayer.Y) > 0.001f)
+                    {
+                        float ny = monster.Position.Y + dirToPlayer.Y * chaseSpeed;
+                        if (_map[(int)(ny + (dirToPlayer.Y > 0 ? mRadius : -mRadius)), (int)(monster.Position.X - mRadius)] == 0 &&
+                            _map[(int)(ny + (dirToPlayer.Y > 0 ? mRadius : -mRadius)), (int)(monster.Position.X + mRadius)] == 0)
+                        {
+                            monster.Position.Y = ny;
+                        }
+                    }
                 }
             }
 
