@@ -25,6 +25,17 @@ public partial class Game1 : Game
     private int _monstersKilled = 0;
     private float _damageTimer = 0f;
 
+    private enum GameState
+    {
+        Menu,
+        Playing,
+        Credits,
+    }
+
+    private GameState _currentState = GameState.Menu;
+    private int _selectedMenuOption = 0; // 0: Começar, 1: Créditos, 2: Sair
+    private KeyboardState _lastK;
+
     private float _recoilTimer = 0f;
     private float _bobTimer = 0f;
     private float _lastBob = 0f;
